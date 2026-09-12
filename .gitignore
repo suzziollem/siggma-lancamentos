@@ -1,0 +1,5 @@
+.DS_Store
+Thumbs.db
+*.log
+SIGGMA_backup_*.json
+SIGGMA_lote_*.json
