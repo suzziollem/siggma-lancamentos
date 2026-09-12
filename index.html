@@ -29,7 +29,6 @@
       <div class="summary-grid">
         <article class="metric"><span>Itens no lote</span><strong id="item-count">0</strong></article>
         <article class="metric"><span>Total a pagar</span><strong id="pay-total">R$ 0,00</strong></article>
-        <article class="metric"><span>Total a receber</span><strong id="receive-total">R$ 0,00</strong></article>
       </div>
 
       <form id="entry-form" class="card form-grid">
@@ -49,7 +48,7 @@
         <div class="field">
           <label for="status">Situação</label>
           <select id="status" required>
-            <option value="paid">Pago / recebido</option>
+            <option value="paid">Pago</option>
             <option value="pending">Pendente</option>
           </select>
         </div>
@@ -62,7 +61,7 @@
           <div class="form-grid details-grid">
             <div class="field"><label for="issue-date">Emissão</label><input id="issue-date" type="date"></div>
             <div class="field"><label for="due-date">Vencimento</label><input id="due-date" type="date"></div>
-            <div class="field"><label for="payment-date">Pagamento/recebimento</label><input id="payment-date" type="date"></div>
+            <div class="field"><label for="payment-date">Pagamento</label><input id="payment-date" type="date"></div>
             <div class="field span-2"><label for="exception">Observação</label><input id="exception" maxlength="180"></div>
           </div>
         </details>
@@ -129,7 +128,7 @@
       <input id="pattern-id" type="hidden">
       <div class="form-grid">
         <div class="field span-2"><label for="shortcut">Atalho único</label><input id="shortcut" required placeholder="Ex.: transporte unidade A"></div>
-        <div class="field"><label for="direction">Tipo</label><select id="direction"><option value="payable">A pagar</option><option value="receivable">A receber</option></select></div>
+        <input id="direction" type="hidden" value="payable">
         <div class="field"><label for="party-code">Código fornecedor/cliente</label><input id="party-code" required></div>
         <div class="field span-2"><label for="party-name">Nome do fornecedor/cliente (opcional)</label><input id="party-name" placeholder="O SIGGMA pode localizar pelo código"></div>
         <div class="field"><label for="expense-type">Tipo de gasto/entrada (opcional)</label><input id="expense-type"></div>
