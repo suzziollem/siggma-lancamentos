@@ -20,6 +20,7 @@ function loadData() {
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 function money(value) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 function brDate(value) { if (!value) return "—"; const [y,m,d] = value.split("-"); return `${d}/${m}/${y}`; }
+function codedLabel(code, name) { return [code, name].filter(Boolean).join(" — ") || "Não informado"; }
 function normalize(text) { return String(text).trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 function parseAmount(value) {
   const clean = String(value).replace(/\s/g, "").replace(/R\$/gi, "");
@@ -48,7 +49,7 @@ function renderPatternSelect() {
 }
 function updatePatternDetail() {
   const p = data.patterns.find(item => item.id === $("pattern").value);
-  $("pattern-detail").textContent = p ? `${p.direction === "payable" ? "A pagar" : "A receber"} • título ${p.titleTableCode} • centro ${p.costCenterCode} — ${p.costCenterName}` : "Selecione um padrão cadastrado.";
+  $("pattern-detail").textContent = p ? `${p.direction === "payable" ? "A pagar" : "A receber"} • título ${codedLabel(p.titleTableCode, p.titleTableName)} • centro ${codedLabel(p.costCenterCode, p.costCenterName)}` : "Selecione um padrão cadastrado.";
 }
 $("pattern").addEventListener("change", updatePatternDetail);
 
@@ -91,9 +92,9 @@ $("clear-form").addEventListener("click", () => clearEntryForm(true));
 
 function renderBatch() {
   $("batch-body").innerHTML = data.batch.map(e => `<tr>
-    <td>${brDate(e.baseDate)}</td><td><strong>${escapeHtml(e.shortcut)}</strong></td><td>${escapeHtml(e.partyCode)} — ${escapeHtml(e.partyName)}</td>
+    <td>${brDate(e.baseDate)}</td><td><strong>${escapeHtml(e.shortcut)}</strong></td><td>${escapeHtml(codedLabel(e.partyCode, e.partyName))}</td>
     <td class="money">${money(e.amount)}</td><td><span class="badge ${e.status === "pending" ? "pending" : ""}">${e.status === "pending" ? "Pendente" : "Pago/recebido"}</span></td>
-    <td>${escapeHtml(e.titleTableCode)} — ${escapeHtml(e.titleTableName)}</td><td>${escapeHtml(e.costCenterCode)} — ${escapeHtml(e.costCenterName)}</td>
+    <td>${escapeHtml(codedLabel(e.titleTableCode, e.titleTableName))}</td><td>${escapeHtml(codedLabel(e.costCenterCode, e.costCenterName))}</td>
     <td><button class="remove" data-remove-entry="${e.id}">Excluir</button></td></tr>`).join("");
   $("empty-batch").hidden = data.batch.length > 0;
   $("item-count").textContent = data.batch.length;
@@ -112,7 +113,7 @@ function batchMessage() {
   const lines = ["SIGGMA — executar lote após minha confirmação", "", `Quantidade: ${data.batch.length}`, `Total a pagar: ${money(data.batch.filter(e=>e.direction === "payable").reduce((s,e)=>s+e.amount,0))}`, `Total a receber: ${money(data.batch.filter(e=>e.direction === "receivable").reduce((s,e)=>s+e.amount,0))}`, ""];
   data.batch.forEach((e,i) => {
     lines.push(`${i+1}. ${brDate(e.baseDate)} | ${e.shortcut} | ${money(e.amount)} | ${e.status === "paid" ? "pago/recebido" : "pendente"}`);
-    lines.push(`   ${e.partyCode} — ${e.partyName} | título ${e.titleTableCode} — ${e.titleTableName} | centro ${e.costCenterCode} — ${e.costCenterName}`);
+    lines.push(`   fornecedor/cliente ${codedLabel(e.partyCode, e.partyName)} | título ${codedLabel(e.titleTableCode, e.titleTableName)} | centro ${codedLabel(e.costCenterCode, e.costCenterName)}`);
     if (e.settlementTableCode) lines.push(`   Liquidar pela tabela ${e.settlementTableCode} — ${e.settlementTableName}; banco e forma de pagamento em branco se opcionais.`);
     if (e.historyText || e.exception) lines.push(`   Histórico: ${e.historyText || "em branco"}${e.exception ? ` | Exceção: ${e.exception}` : ""}`);
   });
@@ -138,8 +139,8 @@ $("finish-batch").addEventListener("click", () => {
 
 function renderPatterns() {
   $("pattern-cards").innerHTML = [...data.patterns].sort((a,b)=>a.shortcut.localeCompare(b.shortcut,"pt-BR")).map(p => `<article class="pattern-card">
-    <h3>${escapeHtml(p.shortcut)}</h3><p>${p.direction === "payable" ? "A pagar" : "A receber"} • ${escapeHtml(p.partyCode)} — ${escapeHtml(p.partyName)}</p>
-    <div class="pattern-meta"><div><span>Tabela do título</span><strong>${escapeHtml(p.titleTableCode)} — ${escapeHtml(p.titleTableName)}</strong></div><div><span>Centro de custo</span><strong>${escapeHtml(p.costCenterCode)} — ${escapeHtml(p.costCenterName)}</strong></div></div>
+    <h3>${escapeHtml(p.shortcut)}</h3><p>${p.direction === "payable" ? "A pagar" : "A receber"} • ${escapeHtml(codedLabel(p.partyCode, p.partyName))}</p>
+    <div class="pattern-meta"><div><span>Tabela do título</span><strong>${escapeHtml(codedLabel(p.titleTableCode, p.titleTableName))}</strong></div><div><span>Centro de custo</span><strong>${escapeHtml(codedLabel(p.costCenterCode, p.costCenterName))}</strong></div></div>
     <p>${escapeHtml(p.notes || "Sem observações.")}</p>
     <div class="actions"><button class="secondary" data-edit-pattern="${p.id}">Editar</button><button class="danger-link" data-delete-pattern="${p.id}">Excluir</button></div>
   </article>`).join("");
