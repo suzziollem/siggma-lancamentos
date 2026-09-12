@@ -1,6 +1,6 @@
 # SIGGMA — Lançamentos diários
 
-Aplicativo web da PanDog para preparar lotes financeiros antes do lançamento na tela 110 do SIGGMA.
+Aplicativo web para preparar lotes financeiros antes do lançamento no SIGGMA.
 
 ## Como usar
 
@@ -15,7 +15,7 @@ Os dados ficam no armazenamento local do navegador. Use **Baixar cópia de segur
 ## Regras implementadas
 
 - A tabela contábil do título vem do padrão escolhido.
-- Para contas a pagar já pagas, a liquidação usa a tabela 22.
+- Para contas a pagar já pagas, a liquidação usa a tabela definida na configuração privada importada pelo usuário.
 - O título é salvo antes da liquidação.
 - Banco e forma de pagamento ficam em branco quando opcionais.
 - Itens pendentes não recebem baixa.
