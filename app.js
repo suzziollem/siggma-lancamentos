@@ -150,7 +150,7 @@ function renderPatterns() {
 function openPatternDialog(id = null) {
   const p = data.patterns.find(item=>item.id===id);
   $("dialog-title").textContent = p ? "Editar padrão" : "Novo padrão"; $("pattern-id").value = p?.id || "";
-  [["shortcut","shortcut"],["direction","direction"],["party-code","partyCode"],["party-name","partyName"],["expense-type","expenseType"],["title-table-code","titleTableCode"],["title-table-name","titleTableName"],["cost-center-code","costCenterCode"],["cost-center-name","costCenterName"],["pattern-notes","notes"]].forEach(([field,key]) => $(field).value = p?.[key] || (field === "direction" ? "payable" : ""));
+  [["shortcut","shortcut"],["direction","direction"],["party-code","partyCode"],["party-name","partyName"],["expense-type","expenseType"],["title-table-code","titleTableCode"],["title-table-name","titleTableName"],["cost-center-code","costCenterCode"],["cost-center-name","costCenterName"],["pattern-notes","notes"]].forEach(([field,key]) => $(field).value = p?.[key] || (field === "direction" ? "payable" : field === "expense-type" ? "Gasto" : ""));
   $("pattern-error").hidden = true; $("pattern-dialog").showModal();
 }
 $("new-pattern").addEventListener("click",()=>openPatternDialog());
