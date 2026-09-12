@@ -1,11 +1,8 @@
-const STORAGE_KEY = "pandog-siggma-v1";
+const STORAGE_KEY = "siggma-diario-v1";
 const defaultData = {
   version: 1,
-  rules: { payableSettlementTable: { code: "22", name: "PAGAMENTOS VIA 8-BANCO" } },
-  patterns: [
-    { id: crypto.randomUUID(), shortcut: "natalia externo", direction: "payable", partyCode: "95", partyName: "Dra. Natalia Melo", expenseType: "Pagamento externo", titleTableCode: "130", titleTableName: "PAGAMENTO EXTERNO", costCenterCode: "1", costCenterName: "CLÍNICA (V)", notes: "Padrão confirmado." },
-    { id: crypto.randomUUID(), shortcut: "juliana transporte F", direction: "payable", partyCode: "104", partyName: "Juliana Silva", expenseType: "Vale-transporte", titleTableCode: "53", titleTableName: "VALE TRANSPORTE", costCenterCode: "4", costCenterName: "LOJA (F)", notes: "Combinação utilizada no teste; revisar se necessário." }
-  ],
+  rules: { payableSettlementTable: { code: "", name: "" } },
+  patterns: [],
   batch: [],
   history: []
 };
@@ -69,6 +66,7 @@ $("entry-form").addEventListener("submit", event => {
   const amount = parseAmount($("amount").value); const baseDate = $("base-date").value;
   if (!pattern || !amount || !baseDate) return toast("Confira padrão, valor e data.");
   const status = $("status").value;
+  if (pattern.direction === "payable" && status === "paid" && !data.rules.payableSettlementTable.code) return toast("Importe ou configure a regra de liquidação antes de adicionar uma conta paga.");
   const entry = {
     id: crypto.randomUUID(), patternId: pattern.id, shortcut: pattern.shortcut, direction: pattern.direction,
     partyCode: pattern.partyCode, partyName: pattern.partyName, expenseType: pattern.expenseType,
@@ -108,7 +106,7 @@ function renderBatch() {
 }
 
 function batchPayload() {
-  return { schema: "pandog-siggma-batch-v1", exportedAt: new Date().toISOString(), rules: data.rules, entries: data.batch.map(({id, createdAt, ...entry}) => entry) };
+  return { schema: "siggma-batch-v1", exportedAt: new Date().toISOString(), rules: data.rules, entries: data.batch.map(({id, createdAt, ...entry}) => entry) };
 }
 function batchMessage() {
   const lines = ["SIGGMA — executar lote após minha confirmação", "", `Quantidade: ${data.batch.length}`, `Total a pagar: ${money(data.batch.filter(e=>e.direction === "payable").reduce((s,e)=>s+e.amount,0))}`, `Total a receber: ${money(data.batch.filter(e=>e.direction === "receivable").reduce((s,e)=>s+e.amount,0))}`, ""];
@@ -181,7 +179,11 @@ $("restore-data").addEventListener("change", async event => {
   catch (_) { toast("Arquivo de cópia inválido."); } finally { event.target.value = ""; }
 });
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]); }
-function renderAll() { renderPatterns(); renderBatch(); renderHistory(); }
+function renderRules() {
+  const rule = data.rules?.payableSettlementTable;
+  $("active-settlement-rule").textContent = rule?.code ? `${rule.code} — ${rule.name || "sem descrição"}` : "não configurada";
+}
+function renderAll() { renderPatterns(); renderBatch(); renderHistory(); renderRules(); }
 
 $("base-date").value = new Date().toISOString().slice(0,10);
 renderAll();
