@@ -1,7 +1,8 @@
 const STORAGE_KEY = "siggma-diario-v1";
+const DEFAULT_SETTLEMENT_TABLE = { code: "22", name: "PAGAMENTOS VIA BANCO" };
 const defaultData = {
   version: 1,
-  rules: { payableSettlementTable: { code: "", name: "" } },
+  rules: { payableSettlementTable: { ...DEFAULT_SETTLEMENT_TABLE } },
   patterns: [],
   batch: [],
   history: []
@@ -13,9 +14,18 @@ const $ = (id) => document.getElementById(id);
 function loadData() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (parsed?.version === 1 && Array.isArray(parsed.patterns)) return parsed;
+    if (parsed?.version === 1 && Array.isArray(parsed.patterns)) return applyRequiredRules(parsed);
   } catch (_) {}
   return structuredClone(defaultData);
+}
+function applyRequiredRules(savedData) {
+  savedData.rules ||= {};
+  const current = savedData.rules.payableSettlementTable || {};
+  savedData.rules.payableSettlementTable = {
+    code: current.code || DEFAULT_SETTLEMENT_TABLE.code,
+    name: current.name || DEFAULT_SETTLEMENT_TABLE.name
+  };
+  return savedData;
 }
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 function money(value) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
@@ -175,7 +185,7 @@ function renderHistory() {
 $("backup-data").addEventListener("click",()=>download(`SIGGMA_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(data,null,2)));
 $("restore-data").addEventListener("change", async event => {
   const file = event.target.files[0]; if (!file) return;
-  try { const restored = JSON.parse(await file.text()); if (restored?.version !== 1 || !Array.isArray(restored.patterns)) throw new Error(); if (!confirm("Substituir padrões, lote e histórico pelos dados desta cópia?")) return; data = restored; saveData(); renderAll(); toast("Cópia restaurada."); }
+  try { const restored = JSON.parse(await file.text()); if (restored?.version !== 1 || !Array.isArray(restored.patterns)) throw new Error(); if (!confirm("Substituir padrões, lote e histórico pelos dados desta cópia?")) return; data = applyRequiredRules(restored); saveData(); renderAll(); toast("Cópia restaurada."); }
   catch (_) { toast("Arquivo de cópia inválido."); } finally { event.target.value = ""; }
 });
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]); }
