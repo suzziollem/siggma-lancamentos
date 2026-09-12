@@ -1,0 +1,9 @@
+{
+  "name": "SIGGMA — Lançamentos diários",
+  "short_name": "SIGGMA Diário",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f2e8",
+  "theme_color": "#173f35",
+  "description": "Preparação e conferência dos lançamentos diários da PanDog no SIGGMA."
+}
