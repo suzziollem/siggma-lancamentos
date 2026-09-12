@@ -93,13 +93,12 @@ $("clear-form").addEventListener("click", () => clearEntryForm(true));
 function renderBatch() {
   $("batch-body").innerHTML = data.batch.map(e => `<tr>
     <td>${brDate(e.baseDate)}</td><td><strong>${escapeHtml(e.shortcut)}</strong></td><td>${escapeHtml(codedLabel(e.partyCode, e.partyName))}</td>
-    <td class="money">${money(e.amount)}</td><td><span class="badge ${e.status === "pending" ? "pending" : ""}">${e.status === "pending" ? "Pendente" : "Pago/recebido"}</span></td>
+    <td class="money">${money(e.amount)}</td><td><span class="badge ${e.status === "pending" ? "pending" : ""}">${e.status === "pending" ? "Pendente" : "Pago"}</span></td>
     <td>${escapeHtml(codedLabel(e.titleTableCode, e.titleTableName))}</td><td>${escapeHtml(codedLabel(e.costCenterCode, e.costCenterName))}</td>
     <td><button class="remove" data-remove-entry="${e.id}">Excluir</button></td></tr>`).join("");
   $("empty-batch").hidden = data.batch.length > 0;
   $("item-count").textContent = data.batch.length;
   $("pay-total").textContent = money(data.batch.filter(e => e.direction === "payable").reduce((s,e) => s + e.amount, 0));
-  $("receive-total").textContent = money(data.batch.filter(e => e.direction === "receivable").reduce((s,e) => s + e.amount, 0));
   const duplicates = findDuplicates();
   $("warnings").hidden = duplicates.length === 0;
   $("warnings").textContent = duplicates.length ? `Atenção: ${duplicates.length} item(ns) podem estar duplicados no lote ou no histórico. Confira antes de enviar.` : "";
@@ -110,9 +109,9 @@ function batchPayload() {
   return { schema: "siggma-batch-v1", exportedAt: new Date().toISOString(), rules: data.rules, entries: data.batch.map(({id, createdAt, ...entry}) => entry) };
 }
 function batchMessage() {
-  const lines = ["SIGGMA — executar lote após minha confirmação", "", `Quantidade: ${data.batch.length}`, `Total a pagar: ${money(data.batch.filter(e=>e.direction === "payable").reduce((s,e)=>s+e.amount,0))}`, `Total a receber: ${money(data.batch.filter(e=>e.direction === "receivable").reduce((s,e)=>s+e.amount,0))}`, ""];
+  const lines = ["SIGGMA — executar lote após minha confirmação", "", `Quantidade: ${data.batch.length}`, `Total a pagar: ${money(data.batch.reduce((s,e)=>s+e.amount,0))}`, ""];
   data.batch.forEach((e,i) => {
-    lines.push(`${i+1}. ${brDate(e.baseDate)} | ${e.shortcut} | ${money(e.amount)} | ${e.status === "paid" ? "pago/recebido" : "pendente"}`);
+    lines.push(`${i+1}. ${brDate(e.baseDate)} | ${e.shortcut} | ${money(e.amount)} | ${e.status === "paid" ? "pago" : "pendente"}`);
     lines.push(`   fornecedor/cliente ${codedLabel(e.partyCode, e.partyName)} | título ${codedLabel(e.titleTableCode, e.titleTableName)} | centro ${codedLabel(e.costCenterCode, e.costCenterName)}`);
     if (e.settlementTableCode) lines.push(`   Liquidar pela tabela ${e.settlementTableCode} — ${e.settlementTableName}; banco e forma de pagamento em branco se opcionais.`);
     if (e.historyText || e.exception) lines.push(`   Histórico: ${e.historyText || "em branco"}${e.exception ? ` | Exceção: ${e.exception}` : ""}`);
