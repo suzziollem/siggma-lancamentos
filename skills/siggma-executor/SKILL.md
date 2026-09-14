@@ -31,4 +31,4 @@ Use o núcleo e o adaptador em `../../executor/`. Trate o arquivo exportado pelo
 
 ## Estado do adaptador
 
-Os seletores de consulta, fornecedor, tabela contábil, centro de custo e conferência de liquidação foram homologados em modo somente leitura. A gravação continua protegida por `homologated: false` até um teste controlado do adaptador concluir cadastro e baixa com conferência final. Não remover essa trava por conveniência.
+Os seletores de consulta, fornecedor, tabela contábil, centro de custo, cadastro, liquidação e conferência final foram homologados em execução controlada. A gravação continua protegida por padrão: só habilitar o adaptador para o lote exato depois de validar empresa/filial, duplicidades, resumo e confirmação explícita. Nunca remover essa trava para pular uma etapa.
