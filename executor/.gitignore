@@ -1,0 +1,8 @@
+# Operational data belongs OUTSIDE this public repository.
+private/
+state/
+reports/
+*.lock
+*.tmp
+.env*
+!.env.example
