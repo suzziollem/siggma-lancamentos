@@ -3,22 +3,29 @@ import { ensure, Stop } from './core.mjs';
 const brDate = iso => iso.split('-').reverse().join('/');
 const isoDate = br => br.trim().split('/').reverse().join('-');
 const numericCode = text => text.trim().match(/^\d+/)?.[0] ?? null;
-const money = text => {
-  const value = text.trim().replace(/\./g, '').replace(',', '.');
+export const moneyFromUi = text => {
+  const raw = text.trim();
+  const value = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
   ensure(/^\d+(\.\d{1,2})?$/.test(value), 'UI_MONEY', 'Valor da grade não reconhecido.');
   return Math.round(Number(value) * 100);
 };
+export const moneyForFilter = cents => (cents / 100).toFixed(2);
+export const HOMOLOGATED_SETTLEMENT_COLUMNS = Object.freeze({
+  status: 'status', table: 'tabelaContabil.tabconCod', amount: 'valor', method: 'pagamentoTipo.tippagDes'
+});
 
 /** Browser-client Tab supplied by Codex; not a Playwright/CDP connection or credential store.
  * This candidate adapter is deliberately locked until its selectors have been homologated.
  * It does not call internal HTTP endpoints or page application objects.
  */
 export class BrowserAdapter {
-  constructor(tab, { tenant, visibleTenantMarker, homologated = false, settlementColumns = null } = {}) {
-    ensure(tab?.playwright && tenant && visibleTenantMarker, 'CONTEXT_REQUIRED', 'Aba e empresa verificável obrigatórias.');
-    this.tab = tab; this.tenant = tenant; this.marker = visibleTenantMarker;
+  constructor(tab, { tenant, visibleTenantMarker, visibleTenantMarkers, homologated = false, settlementColumns = null } = {}) {
+    const markers = visibleTenantMarkers || (visibleTenantMarker ? [visibleTenantMarker] : []);
+    ensure(tab?.playwright && tenant && Array.isArray(markers) && markers.length >= 2,
+      'CONTEXT_REQUIRED', 'Aba, empresa e filial verificáveis são obrigatórias.');
+    this.tab = tab; this.tenant = tenant; this.markers = markers;
     this.homologated = homologated;
-    this.settlementColumns = settlementColumns;
+    this.settlementColumns = settlementColumns || HOMOLOGATED_SETTLEMENT_COLUMNS;
     this.main = tab.playwright.locator('div.ajan-geral[data-id="110"]');
   }
   async assertContext(tenant) {
@@ -28,7 +35,8 @@ export class BrowserAdapter {
     const dom = await this.tab.playwright.domSnapshot();
     ensure(!/Sessão Expirada|Sessao Expirada/.test(dom) && !await this.tab.playwright.locator('input[type="password"]').filter({ visible: true }).count(),
       'AUTH_REQUIRED', 'Login necessário. Usar browserAuth; nunca fornecer senha ao executor.');
-    ensure(tenant === this.tenant && dom.includes(this.marker), 'WRONG_TENANT', 'Empresa/filial não confere.');
+    ensure(tenant === this.tenant && this.markers.every(marker => dom.includes(marker)),
+      'WRONG_TENANT', 'Empresa/filial não confere.');
     ensure(await this.main.count() === 1, 'UI_CHANGED', 'Abra uma única tela 110.');
   }
   async one(locator) {
@@ -37,15 +45,34 @@ export class BrowserAdapter {
   }
   async value(locator) { return (await locator.evaluateAll(es => es.map(e => e.value)))[0]; }
   async fill(locator, value) {
-    await (await this.one(locator)).fill(String(value));
-    await locator.press('Tab');
-    ensure((await this.value(locator)) === String(value), 'UI_VALUE', 'O campo não reteve o valor esperado.');
+    const field = await this.one(locator);
+    await field.click();
+    await field.press('Control+A');
+    await field.press('Backspace');
+    if (String(value)) await field.fill(String(value));
+    const retained = await this.value(field);
+    ensure(retained === String(value) || (!String(value) && /^[\s/]*$/.test(retained)),
+      'UI_VALUE', 'O campo não reteve o valor esperado.');
+    await field.press('Tab');
   }
   async click(locator) { await (await this.one(locator)).click(); }
   async select(locator, value) {
     await (await this.one(locator)).selectOption(value);
     const selected = await this.value(locator);
     if (typeof value === 'string') ensure(selected === value, 'UI_VALUE', 'Filtro não aplicado.');
+  }
+  async selectedValues(locator) {
+    return locator.evaluateAll(es => es.flatMap(e => [...e.selectedOptions].map(o => o.value)));
+  }
+  async clearMultiple(locator, removers) {
+    let values = await this.selectedValues(locator);
+    while (values.length) {
+      const remove = removers.first();
+      ensure(await removers.count() > 0 && await remove.isVisible(), 'EXTRA_FILTER', 'Filtro múltiplo não pode ser limpo.');
+      const previous = values.length;
+      await remove.click();
+      values = await this.waitUntil(() => this.selectedValues(locator), current => current.length < previous);
+    }
   }
   async waitUntil(read, accepted, timeout = 12000) {
     const end = Date.now() + timeout;
@@ -56,6 +83,17 @@ export class BrowserAdapter {
     } while (Date.now() < end);
     throw new Stop('UI_TIMEOUT', 'Tela não confirmou a etapa; não repetir a ação automaticamente.');
   }
+  async closeReadOnlyForm(form) {
+    await this.click(form.locator('#btnCancelar'));
+    try {
+      await this.waitUntil(() => form.count(), n => n === 0, 3000);
+    } catch (error) {
+      if (!(error instanceof Stop) || error.code !== 'UI_TIMEOUT' || await form.count() === 0) throw error;
+      // Repeating Cancel is safe here: this helper is used only after a read-only inspection.
+      await this.click(form.locator('#btnCancelar'));
+      await this.waitUntil(() => form.count(), n => n === 0, 20000);
+    }
+  }
   async grid(scope) {
     const grids = scope.locator('table.ui-jqgrid-btable').filter({ visible: true });
     ensure(await grids.count() === 1, 'UI_CHANGED', 'Grade ambígua.');
@@ -63,7 +101,6 @@ export class BrowserAdapter {
       rows: [...table.querySelectorAll('tr[id]')].map(row => ({
         id: row.id,
         cells: Object.fromEntries([...row.querySelectorAll('td[aria-describedby]')]
-          .filter(cell => { const r = cell.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(cell).display !== 'none'; })
           .map(cell => [cell.getAttribute('aria-describedby').slice(table.id.length + 1), cell.innerText.trim()]))
       }))
     }))).then(result => result[0]);
@@ -74,8 +111,10 @@ export class BrowserAdapter {
       id, partyCode: numericCode(c.nome || ''), titleTableCode: numericCode(c['tabelaContabil.tabconCod'] || ''),
       issueDate: isoDate(c.emissao || ''), dueDate: isoDate(c.vencimento || ''),
       paymentDate: c.pagamento ? isoDate(c.pagamento) : null,
-      amountCents: money(c.valor), paidCents: money(c.valorPago || '0,00'), balanceCents: money(c.valorPendente),
-      historyText: c.historico || ''
+      amountCents: moneyFromUi(c.valor), paidCents: moneyFromUi(c.valorPago || '0,00'),
+      balanceCents: moneyFromUi(c.valorPendente), historyText: c.historico || '',
+      isPaid: c.pago === 'true', paidBank: c.pagoBanco === 'Sim', bankName: c.banDes || null,
+      paymentMethodCode: c.formaPagamento || null
     }));
   }
   async query(field, value, issueDate = null) {
@@ -89,8 +128,10 @@ export class BrowserAdapter {
     await this.select(this.main.locator('#modelo'), 'título');
     await this.select(this.main.locator('#extras'), '');
     await this.select(this.main.locator('#tipo'), '');
-    await this.select(this.main.locator('#status'), []);
-    await this.select(this.main.locator('#tabelasContabeis'), []);
+    await this.clearMultiple(this.main.locator('#status'),
+      this.main.locator('#status + span .select2-selection__choice__remove'));
+    await this.clearMultiple(this.main.locator('#tabelasContabeis'),
+      this.main.locator('#tabelasContabeis + span .select2-selection__choice__remove'));
     await this.select(this.main.locator('#tipoData'), 'e.emissao');
     await this.fill(this.main.locator('input[name="periodoIni"]'), issueDate ? brDate(issueDate) : '');
     await this.fill(this.main.locator('input[name="periodoFim"]'), issueDate ? brDate(issueDate) : '');
@@ -112,7 +153,7 @@ export class BrowserAdapter {
     return rows;
   }
   async findCandidates(e) {
-    const rows = await this.query('e.valor', (e.amountCents / 100).toFixed(2).replace('.', ','), e.issueDate);
+    const rows = await this.query('e.valor', moneyForFilter(e.amountCents), e.issueDate);
     ensure(rows.every(r => r.amountCents === e.amountCents && r.issueDate === e.issueDate), 'FILTER_MISMATCH', 'Grade não corresponde aos filtros.');
     return { complete: true, titles: rows.filter(r => r.partyCode === e.partyCode && r.dueDate === e.dueDate) };
   }
@@ -142,7 +183,7 @@ export class BrowserAdapter {
   }
   writable() {
     ensure(this.homologated, 'HOMOLOGATION_REQUIRED', 'Adaptador de telas ainda não homologado; gravações bloqueadas.');
-    ensure(this.settlementColumns && ['status', 'table', 'amount', 'bank', 'method'].every(k =>
+    ensure(this.settlementColumns && ['status', 'table', 'amount', 'method'].every(k =>
       typeof this.settlementColumns[k] === 'string' && this.settlementColumns[k].length > 0),
       'HOMOLOGATION_REQUIRED', 'Conferência de liquidação deve ser mapeada antes de criar qualquer título.');
   }
@@ -152,15 +193,16 @@ export class BrowserAdapter {
     await this.click(this.main.locator('#btnNovo'));
     const form = this.tab.playwright.locator('div.ajan-geral[data-id="225"]');
     await this.waitUntil(() => form.count(), n => n === 1);
-    // Field positions observed on 0225; reject changed shape before filling.
-    const shapes = await form.locator('input').evaluateAll(es => es.map(e => ({ type: e.type, readOnly: e.readOnly, required: e.required })));
-    ensure(shapes[4]?.required && shapes[5]?.type === 'button' && shapes[6]?.readOnly && shapes[10]?.type === 'button',
-      'UI_CHANGED', 'Estrutura da tela 0225 mudou.');
-    await this.lookup(form.locator('input').nth(5), e.titleTableCode);
-    ensure(await this.value(form.locator('input').nth(4)) === e.titleTableCode, 'LOOKUP_MISMATCH', 'Tabela incorreta.');
+    const table = form.locator('#tabelaContabil');
+    const party = form.locator('#fornecedor');
+    await this.waitUntil(async () => [await table.locator('input').count(), await party.locator('input').count()],
+      counts => counts[0] === 4 && counts[1] === 4, 30000);
+    await this.lookup(table.locator('input[type="button"]'), e.titleTableCode);
+    ensure(await this.value(table.locator('input[required]')) === e.titleTableCode, 'LOOKUP_MISMATCH', 'Tabela incorreta.');
     if (e.partyCode) {
-      await this.lookup(form.locator('input').nth(10), e.partyCode);
-      ensure(await this.value(form.locator('input').nth(9)) === e.partyCode, 'LOOKUP_MISMATCH', 'Fornecedor incorreto.');
+      await this.lookup(party.locator('input[type="button"]'), e.partyCode);
+      ensure(await this.value(party.locator('input.ui-autocomplete-input')) === e.partyCode,
+        'LOOKUP_MISMATCH', 'Fornecedor incorreto.');
     }
     await this.fill(form.locator('#valor'), (e.amountCents / 100).toFixed(2));
     await this.fill(form.locator('input[name="emissao"]'), brDate(e.issueDate));
@@ -171,13 +213,19 @@ export class BrowserAdapter {
       await this.click(form.getByRole('tab', { name: 'Centros de Custos', exact: true }));
       const cc = form.locator('#centroCustos');
       await this.click(cc.getByRole('button', { name: 'Novo', exact: true }));
-      ensure(await cc.locator('input').count() === 12, 'UI_CHANGED', 'Rateio mudou.');
-      await this.lookup(cc.locator('input').nth(2), e.costCenterCode);
-      await this.fill(cc.locator('input').nth(9), (e.amountCents / 100).toFixed(2));
-      await cc.locator('input').nth(11).fill('100');
-      await cc.locator('input').nth(11).press('Tab');
-      const allocation = await cc.innerText();
-      ensure(allocation.includes(e.costCenterCode + ' - ') && allocation.includes('100.00'), 'ALLOCATION_MISMATCH', 'Rateio não confirmado.');
+      const editRow = cc.locator('tr.table-row');
+      await this.waitUntil(() => editRow.count(), n => n === 1);
+      const cells = editRow.locator(':scope > td.table-cell');
+      ensure(await cells.count() === 5, 'UI_CHANGED', 'Rateio mudou.');
+      await this.lookup(cells.nth(0).locator('input[type="button"]'), e.costCenterCode);
+      ensure(await this.value(cells.nth(0).locator('input.ui-autocomplete-input')) === e.costCenterCode,
+        'LOOKUP_MISMATCH', 'Centro de custo incorreto.');
+      await this.fill(cells.nth(2).locator('input:not([type])'), (e.amountCents / 100).toFixed(2));
+      await this.waitUntil(() => editRow.locator('input').count(), n => n === 0);
+      const allocation = await editRow.locator(':scope > td.table-cell').evaluateAll(es => es.map(e => e.innerText.trim()));
+      ensure(allocation.length === 5 && numericCode(allocation[0]) === e.costCenterCode &&
+        moneyFromUi(allocation[2]) === e.amountCents && Number(allocation[3]) === 100,
+        'ALLOCATION_MISMATCH', 'Rateio não confirmado.');
     }
     // The direct shortcut is intentionally never used. Never click btnBaixarTitulo.
     await this.click(form.locator('#btnPersistir'));
@@ -191,16 +239,26 @@ export class BrowserAdapter {
     await this.click(this.main.locator('#btnAlterar'));
     const form = this.tab.playwright.locator('div.ajan-geral[data-id="225"]');
     await this.waitUntil(() => form.count(), n => n === 1);
-    await this.click(form.getByRole('tab', { name: 'Centros de Custos', exact: true }));
-    const cells = await form.locator('#centroCustos table tbody tr').evaluateAll(es => es.map(e =>
-      [...e.querySelectorAll('td')].filter(c => c.offsetWidth || c.offsetHeight).map(c => c.innerText.trim())));
+    const ccTab = form.getByRole('tab', { name: 'Centros de Custos', exact: true });
+    await this.waitUntil(() => ccTab.count(), n => n === 1, 30000);
+    await this.click(ccTab);
+    const rows = form.locator('#centroCustos tr.table-row');
+    let signature = null; let stableSince = 0;
+    const settled = await this.waitUntil(async () => {
+      const total = await form.locator('#centroCustos').innerText();
+      const cells = await rows.evaluateAll(es => es.map(e =>
+        [...e.querySelectorAll(':scope > td.table-cell')].map(c => c.innerText.trim())));
+      const next = JSON.stringify([total.includes('Total:'), cells]);
+      if (next !== signature) { signature = next; stableSince = Date.now(); }
+      return { cells, stable: total.includes('Total:') && Date.now() - stableSince >= 1500 };
+    }, result => result.stable, 30000);
+    const cells = settled.cells;
     const allocations = cells.filter(c => /^\d+\s*-/.test(c[0] || ''));
     ensure(allocations.length <= 1, 'ALLOCATION_MISMATCH', 'Múltiplos centros precisam de revisão.');
     title.costCenterCode = allocations.length ? numericCode(allocations[0][0]) : null;
-    title.allocationCents = allocations.length ? Math.round(Number(allocations[0][2]) * 100) : null;
+    title.allocationCents = allocations.length ? moneyFromUi(allocations[0][2]) : null;
     title.allocationPercent = allocations.length ? Number(allocations[0][3]) : null;
-    await this.click(form.getByRole('button', { name: 'Cancelar', exact: true }));
-    await this.waitUntil(() => form.count(), n => n === 0);
+    await this.closeReadOnlyForm(form);
     return title;
   }
   async settleTitle(id, e) {
@@ -209,18 +267,18 @@ export class BrowserAdapter {
     const before = await this.selectTitle(id);
     ensure(before.paidCents === 0 && before.balanceCents === e.amountCents, 'BALANCE_CHANGED', 'Saldo inesperado.');
     await this.click(this.main.locator('#btnBaixar'));
-    const form = this.tab.playwright.locator('div.ajan-geral').filter({ has: this.tab.playwright.getByRole('button', { name: 'Efetuar baixa', exact: true }) });
+    const form = this.tab.playwright.locator('div.ajan-geral').filter({ has: this.tab.playwright.locator('#btnEfetuarBaixa') });
     await this.waitUntil(() => form.count(), n => n === 1);
-    // First editable required input is the accounting table code, followed by its lookup.
-    const required = form.locator('input[required]').first();
-    const button = form.locator('input[type="button"]').first();
-    await this.lookup(button, '22');
+    const table = form.locator('#tabelaContabil');
+    await this.waitUntil(() => table.locator('input').count(), n => n === 4, 30000);
+    const required = table.locator('input[required]');
+    await this.lookup(table.locator('input[type="button"]'), '22');
     ensure(await this.value(required) === '22', 'SETTLEMENT_TABLE', 'A tela não reteve tabela 22.');
     await this.fill(form.locator('input[name="pagamento"]'), brDate(e.paymentDate));
     await this.fill(form.locator('input[name="previsaoPagamento"]'), brDate(e.paymentDate));
-    ensure(money((await this.value(form.locator('#valorPago'))).replace('.', ',')) === e.amountCents,
+    ensure(moneyFromUi(await this.value(form.locator('#valorPago'))) === e.amountCents,
       'BALANCE_CHANGED', 'Valor da baixa divergente.');
-    await this.click(form.getByRole('button', { name: 'Efetuar baixa', exact: true }));
+    await this.click(form.locator('#btnEfetuarBaixa'));
     await this.waitUntil(() => form.count(), n => n === 0);
     return this.readSettlement(id);
   }
@@ -229,7 +287,8 @@ export class BrowserAdapter {
     await this.click(this.main.locator('#btnLancamentos'));
     const form = this.tab.playwright.locator('div.ajan-geral').filter({ has: this.tab.playwright.locator('input[name="filterDate"]') });
     await this.waitUntil(() => form.count(), n => n === 1);
-    const { rows } = await this.grid(form);
+    await this.waitUntil(() => form.locator('table.ui-jqgrid-btable').filter({ visible: true }).count(), n => n === 1, 30000);
+    const { rows } = await this.waitUntil(() => this.grid(form), grid => grid.rows.length > 0);
     // Column aliases must be established from a fresh visible grid during homologation.
     const aliases = this.settlementColumns;
     ensure(aliases, 'HOMOLOGATION_REQUIRED', 'Mapeamento da grade de liquidação precisa de homologação.');
@@ -237,10 +296,12 @@ export class BrowserAdapter {
     ensure(active.length === 1, 'SETTLEMENT_MISMATCH', 'Baixa ativa ausente ou múltipla.');
     const c = active[0].cells;
     const receipt = { id: active[0].id, status: 'liquidado', tableCode: numericCode(c[aliases.table]),
-      amountCents: money(c[aliases.amount]), paymentDate: title.paymentDate, balanceCents: title.balanceCents,
-      bankCode: c[aliases.bank]?.trim() || null, paymentMethodCode: c[aliases.method]?.trim() || null };
-    ensure(aliases.bank in c && aliases.method in c, 'INCOMPLETE_RECEIPT', 'Banco e forma de pagamento não verificáveis.');
-    await this.click(form.getByRole('button', { name: 'Fechar', exact: true }));
+      amountCents: moneyFromUi(c[aliases.amount]), paymentDate: title.paymentDate, balanceCents: title.balanceCents,
+      bankCode: title.paidBank ? (title.bankName || 'VINCULADO') : null,
+      paymentMethodCode: title.paymentMethodCode || c[aliases.method]?.trim() || null };
+    ensure(aliases.method in c && typeof title.paidBank === 'boolean',
+      'INCOMPLETE_RECEIPT', 'Banco e forma de pagamento não verificáveis.');
+    await this.click(form.locator('#btnFechar'));
     return receipt;
   }
 }
