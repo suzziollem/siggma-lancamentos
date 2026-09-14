@@ -3,15 +3,15 @@
 ## Estado real desta entrega
 
 O núcleo, o diário persistente, o validador e o simulador estão implementados e testados localmente.
-O adaptador de telas teve seus fluxos de consulta e conferência **homologados em modo somente leitura**,
-mas as gravações continuam bloqueadas por padrão.
-Não ativar `homologated` antes do teste controlado de escrita descrito abaixo.
+O adaptador de telas teve seus fluxos de consulta, cadastro, liquidação e conferência
+**homologados em um teste controlado**. As gravações continuam bloqueadas por padrão:
+`homologated` só pode ser habilitado pelo executor depois de validar empresa/filial,
+duplicidades, o resumo do lote e a confirmação explícita da usuária.
 O programa do GitHub Pages continua preparando lotes; esta entrega não liga o site diretamente ao SIGGMA.
 
-O módulo corrigido foi carregado no navegador autorizado e executou consultas reais sem gravação. Ele releu
-um título existente, o centro de custo, a liquidação na tabela 22, o saldo e os opcionais; também identificou
-esse mesmo título como possível duplicidade. Nenhum título foi criado durante essa homologação.
-Os testes automatizados usam somente cadastros fictícios; a escrita real ainda exige um teste controlado.
+O módulo corrigido foi carregado no navegador autorizado e executou consultas reais, cadastro controlado,
+baixa na tabela 22 e releitura final de títulos, centros, liquidações, saldo e opcionais. A execução confirmou
+que título e baixa devem permanecer separados. Os testes automatizados usam somente cadastros fictícios.
 
 ## Operação pretendida
 
@@ -107,13 +107,15 @@ Concluído em modo somente leitura:
 - tabela 22, valor, status, banco, forma de pagamento e saldo na baixa existente;
 - preenchimento de um rascunho completo e cancelamento sem salvar.
 
-Pendente antes de ativar gravações:
+Condições permanentes para habilitar uma execução:
 
-- executar um lançamento descartável ou legítimo explicitamente autorizado usando o adaptador;
-- conferir o código do título criado, a baixa, tabela 22, centro, opcionais e saldo;
-- interromper o teste entre título e baixa e validar a retomada pelo diário;
-- manter evidências privadas e não publicar dados reais no repositório.
+- confirmação explícita do lote e do destino, imediatamente antes da primeira gravação;
+- consulta completa de duplicidades e conferência de empresa/filial;
+- diário operacional disponível antes de cada ação financeira;
+- parada obrigatória se o recibo do título ou da baixa não puder ser verificado;
+- evidências privadas: nunca publicar dados reais no repositório.
 
-O bloqueio `HOMOLOGATION_REQUIRED` faz parte desta versão. Não é suficiente trocar uma variável para tornar o fluxo confiável.
+O bloqueio `HOMOLOGATION_REQUIRED` continua fazendo parte desta versão. Não basta trocar uma variável:
+o executor precisa preservar todas as verificações acima em cada lote.
 Esta entrega não mede nem promete tempo por lançamento. O objetivo é reduzir decisões repetidas e leitura de telas,
 mantendo a execução sequencial e verificável.
