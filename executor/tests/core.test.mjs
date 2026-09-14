@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Executor, planBatch, Stop } from '../core.mjs';
 import { MemoryJournal, Simulator } from '../simulator.mjs';
 import { FileJournal } from '../journal.mjs';
-import { BrowserAdapter } from '../browser-adapter.mjs';
+import { BrowserAdapter, moneyForFilter, moneyFromUi } from '../browser-adapter.mjs';
 
 const raw = (changes = {}) => ({ direction: 'payable', partyCode: '90001', titleTableCode: '90011', costCenterCode: '90021',
   amount: 12.34, baseDate: '2030-02-01', status: 'paid', settlementTableCode: '22', ...changes });
@@ -151,8 +151,15 @@ test('diário em disco persiste, trava e restringe permissões', async () => {
   assert.equal((await stat(b.path)).mode & 0o777, 0o600); await b.release();
 });
 test('adaptador real fica bloqueado por padrão', () => {
-  const a = new BrowserAdapter({ playwright: { locator: () => ({}) } }, { tenant: 'TEST-ONLY', visibleTenantMarker: 'TEST COMPANY' });
+  const a = new BrowserAdapter({ playwright: { locator: () => ({}) } },
+    { tenant: 'TEST-ONLY', visibleTenantMarkers: ['TEST COMPANY', 'TEST BRANCH'] });
   assert.throws(() => a.writable(), { code: 'HOMOLOGATION_REQUIRED' });
+});
+test('valores da interface aceitam formatos da grade e da liquidação', () => {
+  assert.equal(moneyFromUi('1.557,27'), 155727);
+  assert.equal(moneyFromUi('1.00'), 100);
+  assert.equal(moneyFromUi('0,00'), 0);
+  assert.equal(moneyForFilter(123), '1.23');
 });
 test('atalho Baixar título não aparece em ações do adaptador', async () => {
   const code = await readFile(new URL('../browser-adapter.mjs', import.meta.url), 'utf8');
