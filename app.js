@@ -1,9 +1,19 @@
 const STORAGE_KEY = "siggma-diario-v1";
 const DEFAULT_SETTLEMENT_TABLE = { code: "22", name: "PAGAMENTOS VIA BANCO" };
+const DEFAULT_PATTERNS = [
+  { id: "padrao-cremacao", shortcut: "Cremação", direction: "payable", partyCode: "160", partyName: "", expenseType: "Gasto", titleTableCode: "130", titleTableName: "PAGAMENTO EXTERNO", costCenterCode: "1", costCenterName: "CLÍNICA (V)", notes: "" },
+  { id: "padrao-gasolina-carro", shortcut: "Gasolina carro", direction: "payable", partyCode: "136", partyName: "", expenseType: "Gasto", titleTableCode: "124", titleTableName: "", costCenterCode: "1", costCenterName: "CLÍNICA (V)", notes: "" },
+  { id: "padrao-gasolina-moto", shortcut: "Gasolina moto", direction: "payable", partyCode: "136", partyName: "", expenseType: "Gasto", titleTableCode: "143", titleTableName: "", costCenterCode: "2", costCenterName: "", notes: "" },
+  { id: "padrao-natalia", shortcut: "Natalia", direction: "payable", partyCode: "95", partyName: "", expenseType: "Gasto", titleTableCode: "130", titleTableName: "PAGAMENTO EXTERNO", costCenterCode: "1", costCenterName: "CLÍNICA (V)", notes: "" },
+  { id: "padrao-sacolas", shortcut: "Sacolas", direction: "payable", partyCode: "200", partyName: "", expenseType: "Gasto", titleTableCode: "17", titleTableName: "", costCenterCode: "2", costCenterName: "", notes: "" },
+  { id: "padrao-freelance-clinica", shortcut: "Freelance clínica", direction: "payable", partyCode: "103", partyName: "", expenseType: "Gasto", titleTableCode: "52", titleTableName: "", costCenterCode: "1", costCenterName: "CLÍNICA (V)", notes: "" },
+  { id: "padrao-vt-yasmim", shortcut: "VT Yasmim", direction: "payable", partyCode: "108", partyName: "", expenseType: "Gasto", titleTableCode: "53", titleTableName: "VALE TRANSPORTE", costCenterCode: "4", costCenterName: "LOJA (F)", notes: "" },
+  { id: "padrao-vt-juliana", shortcut: "VT Juliana", direction: "payable", partyCode: "104", partyName: "", expenseType: "Gasto", titleTableCode: "53", titleTableName: "VALE TRANSPORTE", costCenterCode: "4", costCenterName: "LOJA (F)", notes: "" }
+];
 const defaultData = {
-  version: 1,
+  version: 2,
   rules: { payableSettlementTable: { ...DEFAULT_SETTLEMENT_TABLE } },
-  patterns: [],
+  patterns: structuredClone(DEFAULT_PATTERNS),
   batch: [],
   history: []
 };
@@ -14,7 +24,13 @@ const $ = (id) => document.getElementById(id);
 function loadData() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (parsed?.version === 1 && Array.isArray(parsed.patterns)) return applyRequiredRules(parsed);
+    if ((parsed?.version === 1 || parsed?.version === 2) && Array.isArray(parsed.patterns)) {
+      // A versão inicial salvava uma lista vazia no celular. Na primeira atualização,
+      // ela recebe os padrões-base já conferidos; listas não vazias são preservadas.
+      if (parsed.version === 1 && parsed.patterns.length === 0) parsed.patterns = structuredClone(DEFAULT_PATTERNS);
+      parsed.version = 2;
+      return applyRequiredRules(parsed);
+    }
   } catch (_) {}
   return structuredClone(defaultData);
 }
