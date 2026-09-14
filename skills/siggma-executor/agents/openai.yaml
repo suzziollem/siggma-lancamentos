@@ -1,0 +1,4 @@
+interface:
+  display_name: "Executor SIGGMA"
+  short_description: "Executa lotes financeiros confirmados no SIGGMA"
+  default_prompt: "Use $siggma-executor para validar e executar meu lote diário no SIGGMA após minha confirmação."
