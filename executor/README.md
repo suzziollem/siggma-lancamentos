@@ -3,13 +3,15 @@
 ## Estado real desta entrega
 
 O núcleo, o diário persistente, o validador e o simulador estão implementados e testados localmente.
-O adaptador de telas é um **candidato não homologado**, com gravações bloqueadas por padrão.
-Não ativar `homologated` antes de concluir a lista de homologação abaixo.
+O adaptador de telas teve seus fluxos de consulta e conferência **homologados em modo somente leitura**,
+mas as gravações continuam bloqueadas por padrão.
+Não ativar `homologated` antes do teste controlado de escrita descrito abaixo.
 O programa do GitHub Pages continua preparando lotes; esta entrega não liga o site diretamente ao SIGGMA.
 
-A leitura inicial das telas foi possível. A tentativa de carregar o módulo no navegador para teste integrado
-foi impedida pela revisão automática do ambiente por falta de créditos. Nenhum título foi criado nesta entrega.
-Os testes automatizados usam somente cadastros fictícios e não comprovam funcionamento no SIGGMA real.
+O módulo corrigido foi carregado no navegador autorizado e executou consultas reais sem gravação. Ele releu
+um título existente, o centro de custo, a liquidação na tabela 22, o saldo e os opcionais; também identificou
+esse mesmo título como possível duplicidade. Nenhum título foi criado durante essa homologação.
+Os testes automatizados usam somente cadastros fictícios; a escrita real ainda exige um teste controlado.
 
 ## Operação pretendida
 
@@ -63,6 +65,7 @@ O CLI não possui opção de execução real.
 | `simulator.mjs` | Sistema fictício isolado para testar fluxos e falhas |
 | `cli.mjs` | Validação e simulação locais |
 | `tests/core.test.mjs` | Testes das regras, falhas e persistência |
+| `../skills/siggma-executor/` | Rotina reutilizável do Codex para lotes diários |
 
 O adaptador recebe a aba já autenticada do navegador autorizado. Não abre conexão CDP, não extrai cookies,
 não lê senhas e não usa endpoints internos do sistema. Autenticação continua pelo recurso seguro `browserAuth`.
@@ -91,20 +94,25 @@ Trava remanescente após queda não é removida automaticamente. Confirmar que n
 as tentativas com o SIGGMA antes da manutenção. Não apagar o diário para “resolver” um bloqueio.
 Falhas não incluem a mensagem bruta do navegador no relatório público, para evitar vazamento de dados.
 
-## Homologação pendente — obrigatória antes de ativar
+## Homologação
 
-- Verificar marcador visível da empresa **e filial**; não usar apenas o nome do usuário logado.
-- Confirmar que os seletores do browser-client conseguem operar os controles do SIGGMA sem os timeouts do teste manual.
-- Validar a observação do ciclo de carregamento da busca. Se não puder ser comprovada, manter `INCOMPLETE_SEARCH/UI_TIMEOUT`.
-- Testar zero resultados, resultado existente, paginação e filtros residuais de fornecedor/banco.
-- Confirmar posições e formato dos campos das telas 0225, centro de custo e liquidação; o candidato rejeita mudanças.
-- Confirmar leitura do centro de custo após salvar, incluindo ausência de centro quando permitido.
-- Mapear as colunas visíveis de liquidação em `settlementColumns`: status, tabela, valor, banco e forma.
-  Se banco/forma não estiverem disponíveis na grade, implementar e validar a leitura pela ficha; não presumir valores vazios.
-- Validar a identificação do título após salvar e da baixa após liquidar, com o servidor terminando a requisição.
-- Exercitar preenchimento sem salvar em ambiente autorizado.
-- Só depois realizar um lançamento controlado explicitamente autorizado, conferir título/baixa/saldo e testar retomada.
-- Registrar evidências de homologação em local privado; não publicar dados reais nos testes ou na descrição da revisão.
+Concluído em modo somente leitura:
+
+- marcador visível da empresa e da filial;
+- ciclo de carregamento, total completo e busca de possível duplicidade;
+- limpeza dos filtros múltiplos pela própria interface;
+- máscaras de valor e datas;
+- seletores de tabela, fornecedor, centro de custo e liquidação;
+- leitura estável do rateio depois da renderização assíncrona;
+- tabela 22, valor, status, banco, forma de pagamento e saldo na baixa existente;
+- preenchimento de um rascunho completo e cancelamento sem salvar.
+
+Pendente antes de ativar gravações:
+
+- executar um lançamento descartável ou legítimo explicitamente autorizado usando o adaptador;
+- conferir o código do título criado, a baixa, tabela 22, centro, opcionais e saldo;
+- interromper o teste entre título e baixa e validar a retomada pelo diário;
+- manter evidências privadas e não publicar dados reais no repositório.
 
 O bloqueio `HOMOLOGATION_REQUIRED` faz parte desta versão. Não é suficiente trocar uma variável para tornar o fluxo confiável.
 Esta entrega não mede nem promete tempo por lançamento. O objetivo é reduzir decisões repetidas e leitura de telas,
